@@ -4,7 +4,7 @@ resource "azurerm_storage_account" "sa" {
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
-  allow_blob_public_access = false
+
 
   blob_properties {
     cors_rule {
