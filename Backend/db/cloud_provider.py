@@ -600,7 +600,7 @@ from azure.storage.blob import (
 )
 
 
-from backend.cloud_config import get_azure_config  # 🔹 NEW IMPORT
+from cloud_config import get_azure_config  # 🔹 NEW IMPORT
 
 
 class AzureProvider(CloudProvider):

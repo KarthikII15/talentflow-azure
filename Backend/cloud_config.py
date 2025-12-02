@@ -2,7 +2,7 @@
 
 from typing import Optional, Dict
 
-from backend.db.firestore_client import db  # you already have this client
+from db.firestore_client import db  # you already have this client
 
 COLLECTION = "CloudConfigs"
 
