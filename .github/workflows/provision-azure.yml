@@ -32,10 +32,11 @@ jobs:
 
       - name: Terraform Apply
         working-directory: infra/azure
-        run: terraform apply -auto-approve \
-          -var="resource_group_name=talentflow-${ENVIRONMENT}-rg" \
-          -var="storage_account_name=talentflow${ENVIRONMENT}stg" \
-          -var="container_name=talentflow-azure"
+        run: |
+          terraform apply -auto-approve \
+            -var="resource_group_name=talentflow-${ENVIRONMENT}-rg" \
+            -var="storage_account_name=talentflow${ENVIRONMENT}stg" \
+            -var="container_name=talentflow-azure"
 
       - name: Export Terraform outputs as JSON
         working-directory: infra/azure
