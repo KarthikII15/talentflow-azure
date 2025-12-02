@@ -16,7 +16,7 @@ def save_azure_config(env: str, connection_string: str, container_name: str) -> 
     Save Azure storage configuration for a given environment and mark it as 'ready'.
     """
     if not db:
-        print("❌ Firestore DB not initialized, cannot save Azure config")
+        print("[ERROR] Firestore DB not initialized, cannot save Azure config")
         return
 
     doc_ref = db.collection(COLLECTION).document(_doc_id(env))
@@ -30,7 +30,7 @@ def save_azure_config(env: str, connection_string: str, container_name: str) -> 
         },
         merge=True,
     )
-    print(f"✅ Saved Azure config for env={env} in {COLLECTION}/{_doc_id(env)}")
+    print(f"[INFO] Saved Azure config for env={env} in {COLLECTION}/{_doc_id(env)}")
 
 
 def get_azure_config(env: str) -> Optional[Dict]:
@@ -38,18 +38,18 @@ def get_azure_config(env: str) -> Optional[Dict]:
     Retrieve Azure config for a given environment from Firestore.
     """
     if not db:
-        print("❌ Firestore DB not initialized, cannot read Azure config")
+        print("[ERROR] Firestore DB not initialized, cannot read Azure config")
         return None
 
     doc_ref = db.collection(COLLECTION).document(_doc_id(env))
     doc = doc_ref.get()
 
     if not doc.exists:
-        print(f"ℹ️ No Azure config found for env={env}")
+        print(f"[INFO] No Azure config found for env={env}")
         return None
 
     data = doc.to_dict()
-    print(f"✅ Loaded Azure config for env={env}")
+    print(f"[INFO] Loaded Azure config for env={env}")
     return data
 
 
@@ -63,7 +63,7 @@ def set_azure_status(env: str, status: str) -> None:
 
     doc_ref = db.collection(COLLECTION).document(_doc_id(env))
     doc_ref.set({"status": status}, merge=True)
-    print(f"📌 Azure status for env={env} -> {status}")
+    print(f"[INFO] Azure status for env={env} -> {status}")
 
 
 def get_azure_status(env: str) -> str:
@@ -73,8 +73,12 @@ def get_azure_status(env: str) -> str:
     """
     cfg = get_azure_config(env)
     if not cfg:
+        print(f"[INFO] No config found for env={env}, returning 'not_provisioned'")
         return "not_provisioned"
-    return cfg.get("status", "unknown")
+    
+    status = cfg.get("status", "unknown")
+    print(f"[INFO] env={env} status={status}")
+    return status
 
 
 def delete_azure_config(env: str) -> None:
@@ -82,8 +86,8 @@ def delete_azure_config(env: str) -> None:
     Completely delete the Azure config document for this environment.
     """
     if not db:
-        print("❌ Firestore DB not initialized, cannot delete Azure config")
+        print("[ERROR] Firestore DB not initialized, cannot delete Azure config")
         return
 
     db.collection(COLLECTION).document(_doc_id(env)).delete()
-    print(f"🗑️ Deleted Azure config for env={env}")
+    print(f"[INFO] Deleted Azure config for env={env}")

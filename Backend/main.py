@@ -6,10 +6,9 @@ from io import BytesIO
 from typing import Literal
 from datetime import timedelta
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from fastapi import Query, Header
 
 # ---------- EXTERNAL IMPORTS ----------
 from pdfminer.high_level import extract_text as pdf_extract_text
@@ -27,10 +26,7 @@ from agents.cloud_setup import CloudSetupAgent
 from agents.librarian import LibrarianAgent
 
 # ---------- NEW IMPORTS FOR AZURE FLOW ----------
-import os
 import httpx
-from pydantic import BaseModel
-
 from cloud_config import (
     save_azure_config,
     get_azure_config,
@@ -67,29 +63,46 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------
-# Azure Models
+# MODELS
 # ---------------------------------------------------------
-from pydantic import BaseModel
+CloudName = Literal["aws", "gcp", "azure"]
 
 class AzureConfigPayload(BaseModel):
     environment: str
     connection_string: str
     container_name: str
 
+class AzureDestroyPayload(BaseModel):
+    environment: str
 
 class UseAzureRequest(BaseModel):
     environment: str = "dev"
 
+class UploadURLRequest(BaseModel):
+    filename: str
 
-class AzureDestroyPayload(BaseModel):
-    environment: str
+class CandidateEvalRequest(BaseModel):
+    job_id: str
+    candidate_id: str
+    required_experience: float
+    candidate_experience: float
+    career_gaps_detected: bool
+    job_shifts_last_year: int
+    skills_match_score: int
 
+class MappingRequest(BaseModel):
+    jd_id: str
+    candidate_id: str
+    status: Literal["PENDING", "SHORTLISTED", "REJECTED"] = "PENDING"
+
+class ShortlistRequest(BaseModel):
+    candidate_id: str
+    skills_match_score: int = 70
 
 # ---------------------------------------------------------
 # INTERNAL AZURE CONFIG UPDATE (called by GitHub Action)
 # ---------------------------------------------------------
 INTERNAL_WEBHOOK_SECRET = os.getenv("INTERNAL_WEBHOOK_SECRET")
-
 
 @app.post("/internal/cloud/azure/config")
 async def internal_update_azure_config(
@@ -100,11 +113,13 @@ async def internal_update_azure_config(
     PRIVATE: Called only from GitHub Action after Terraform finishes.
     Saves the Azure connection string & container name into Firestore.
     """
+    print(f"[INFO] [internal_update_azure_config] Received payload: {payload}")
 
     if not INTERNAL_WEBHOOK_SECRET or x_internal_secret != INTERNAL_WEBHOOK_SECRET:
-        # Protect this endpoint from external calls
+        print("[ERROR] [internal_update_azure_config] Unauthorized access attempt")
         raise HTTPException(status_code=403, detail="Unauthorized")
 
+    print(f"[INFO] [internal_update_azure_config] Saving config for env={payload.environment}")
     save_azure_config(
         env=payload.environment,
         connection_string=payload.connection_string,
@@ -129,38 +144,39 @@ async def internal_azure_destroyed(
 # ---------------------------------------------------------
 # PUBLIC AZURE PROVISIONING ENDPOINT (triggered from frontend)
 # ---------------------------------------------------------
-
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPO")  # e.g. "your-org/TAG"
-
+GITHUB_REPO = os.getenv("GITHUB_REPO")
 
 @app.post("/cloud/azure/provision")
 async def provision_azure(req: UseAzureRequest):
     """
     Trigger Azure infrastructure provisioning via GitHub Actions.
-    - If Azure config already exists for this environment -> return 'ready'
-    - Else -> trigger repo_dispatch 'provision-azure' and return 'provisioning'
     """
+    print(f"[INFO] [provision_azure] Request for env={req.environment}")
 
     # 1. Check if already provisioned
     existing = get_azure_config(req.environment)
     if existing and existing.get("status") == "ready":
+        print(f"[INFO] [provision_azure] Already ready for env={req.environment}")
         return {
             "status": "ready",
             "message": f"Azure already provisioned for env={req.environment}",
         }
 
     # Mark as provisioning in Firestore
+    print(f"[INFO] [provision_azure] Setting status to 'provisioning' for env={req.environment}")
     set_azure_status(req.environment, "provisioning")
 
     # 2. Validate GitHub config
     if not GITHUB_TOKEN or not GITHUB_REPO:
+        print("[ERROR] [provision_azure] Missing GITHUB_TOKEN or GITHUB_REPO")
         raise HTTPException(
             status_code=500,
             detail="GitHub integration not configured (GITHUB_TOKEN / GITHUB_REPO missing)",
         )
 
     # 3. Trigger GitHub repo dispatch to start the Terraform workflow
+    print(f"[INFO] [provision_azure] Triggering GitHub dispatch to {GITHUB_REPO}")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"https://api.github.com/repos/{GITHUB_REPO}/dispatches",
@@ -177,13 +193,13 @@ async def provision_azure(req: UseAzureRequest):
         )
 
     if resp.status_code not in (200, 201, 204):
-        print("❌ GitHub dispatch error:", resp.status_code, resp.text)
+        print("[ERROR] [provision_azure] GitHub dispatch error:", resp.status_code, resp.text)
         raise HTTPException(
             status_code=500,
             detail="Failed to trigger Azure provisioning via GitHub Actions",
         )
 
-
+    print(f"[INFO] [provision_azure] GitHub dispatch successful for env={req.environment}")
     return {
         "status": "provisioning",
         "message": f"Azure provisioning started for env={req.environment}",
@@ -232,52 +248,6 @@ async def destroy_azure(req: UseAzureRequest):
         "status": "destroying",
         "message": f"Azure destruction started for env={req.environment}"
     }
-
-
-
-
-
-# ---------------------------------------------------------
-# MODELS
-# ---------------------------------------------------------
-CloudName = Literal["aws", "gcp", "azure"]
-
-# ---------------------------------------------------------
-# AZURE CLOUD CONFIG MODELS
-# ---------------------------------------------------------
-class AzureConfigPayload(BaseModel):
-    environment: str
-    connection_string: str
-    container_name: str
-
-class AzureDestroyPayload(BaseModel):
-    environment: str
-
-
-class UseAzureRequest(BaseModel):
-    # You can later switch this to a project-specific id if needed
-    environment: str = "dev"
-
-class UploadURLRequest(BaseModel):
-    filename: str
-
-class CandidateEvalRequest(BaseModel):
-    job_id: str
-    candidate_id: str
-    required_experience: float
-    candidate_experience: float
-    career_gaps_detected: bool
-    job_shifts_last_year: int
-    skills_match_score: int
-
-class MappingRequest(BaseModel):
-    jd_id: str
-    candidate_id: str
-    status: Literal["PENDING", "SHORTLISTED", "REJECTED"] = "PENDING"
-
-class ShortlistRequest(BaseModel):
-    candidate_id: str
-    skills_match_score: int = 70
 
 # ---------------------------------------------------------
 # HELPERS
@@ -350,9 +320,9 @@ def generate_upload_url(payload: UploadURLRequest, provider: CloudName = Query(.
 # ---------------------------------------------------------
 @app.post("/cloud/process-files")
 def process_files(provider: CloudName = Query(...), session_id: str = Query(...)):
-    from backend.agents.jd_extractor import extract_jd_title
-    from backend.agents.name_extractor import extract_name_from_text
-    from backend.agents.skills_extractor import extract_skills
+    from agents.jd_extractor import extract_jd_title
+    from agents.name_extractor import extract_name_from_text
+    from agents.skills_extractor import extract_skills
 
     try:
         provider_obj = get_provider(provider)
@@ -505,4 +475,5 @@ async def get_azure_status_api(environment: str = Query("dev")):
       - unknown
     """
     status = get_azure_status(environment)
+    print(f"[INFO] [get_azure_status_api] env={environment} status={status}")
     return {"environment": environment, "status": status}

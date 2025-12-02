@@ -21,6 +21,7 @@ export default function CloudSelector() {
     }, []);
 
     const handleUseAzure = async () => {
+        console.log("🔵 Use Azure Clicked");
         try {
             const res = await useAzure(environment);
             setAzureStatus(res.status);
@@ -86,6 +87,7 @@ export default function CloudSelector() {
         <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
                 <button
+                    type="button"
                     onClick={handleUseAzure}
                     className="px-4 py-2 rounded-lg border bg-blue-600 text-white hover:bg-blue-500 border-blue-500"
                 >
@@ -93,6 +95,7 @@ export default function CloudSelector() {
                 </button>
 
                 <button
+                    type="button"
                     onClick={handleDestroyAzure}
                     className="px-4 py-2 rounded-lg border border-red-500 text-red-500 hover:bg-red-500/10"
                 >
