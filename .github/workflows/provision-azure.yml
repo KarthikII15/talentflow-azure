@@ -1,0 +1,59 @@
+name: Provision Azure Infra
+
+on:
+  # Only triggered explicitly from the backend (repo dispatch)
+  repository_dispatch:
+    types: [provision-azure]
+
+jobs:
+  terraform-azure:
+    runs-on: ubuntu-latest
+
+    # These are standard Azure service principal creds – add them as GitHub Secrets.
+    env:
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Extract environment from payload
+        run: |
+          echo "ENVIRONMENT=${{ github.event.client_payload.environment }}" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        working-directory: infra/azure
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/azure
+        run: terraform apply -auto-approve \
+          -var="resource_group_name=talentflow-${ENVIRONMENT}-rg" \
+          -var="storage_account_name=talentflow${ENVIRONMENT}stg" \
+          -var="container_name=talentflow-azure"
+
+      - name: Export Terraform outputs as JSON
+        working-directory: infra/azure
+        run: terraform output -json > tf-outputs.json
+
+      - name: Send outputs back to Backend
+        run: |
+          AZURE_CONN_STRING=$(jq -r '.azure_storage_connection_string.value' tf-outputs.json)
+          CONTAINER_NAME=$(jq -r '.azure_container_name.value' tf-outputs.json)
+
+          curl -X POST "$BACKEND_URL/internal/cloud/azure/config" \
+            -H "Content-Type: application/json" \
+            -H "X-Internal-Secret: $INTERNAL_WEBHOOK_SECRET" \
+            -d "{
+              \"environment\": \"${ENVIRONMENT}\",
+              \"connection_string\": \"${AZURE_CONN_STRING}\",
+              \"container_name\": \"${CONTAINER_NAME}\"
+            }"
+        env:
+          BACKEND_URL:             ${{ secrets.BACKEND_URL }}            # e.g. http://your-backend:8000
+          INTERNAL_WEBHOOK_SECRET: ${{ secrets.INTERNAL_WEBHOOK_SECRET }} # shared secret
