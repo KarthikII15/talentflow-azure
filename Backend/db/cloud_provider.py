@@ -599,75 +599,32 @@ from azure.storage.blob import (
     BlobSasPermissions,
 )
 
-
-from cloud_config import get_azure_config  # 🔹 NEW IMPORT
-
-
 class AzureProvider(CloudProvider):
     cloud_name = "azure"
 
-    def __init__(self, environment: str | None = None):
-        """
-        AzureProvider will try:
-        1. Firestore CloudConfigs (CloudConfigs/azure-<env>)
-        2. Fallback to env vars:
-           - AZURE_STORAGE_CONNECTION_STRING
-           - AZURE_CONTAINER
-        """
-        if environment is None:
-            environment = os.getenv("APP_ENV", "dev")
-
-        conn_str = None
-        container_name = None
-
-        # 1. Try to load from Firestore
-        cfg = get_azure_config(environment)
-        if cfg:
-            conn_str = cfg.get("connection_string")
-            container_name = cfg.get("container_name")
-            print(f"🔐 [AZURE] Loaded config from Firestore for env={environment}")
-        else:
-            print(f"ℹ️ [AZURE] No Firestore config for env={environment}, falling back to env vars")
-
-        # 2. Fallback to env var if needed
+    def __init__(self):
+        conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         if not conn_str:
-            conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-
-        if not conn_str:
-            raise RuntimeError(
-                "No Azure connection string found. "
-                "Checked Firestore CloudConfigs and AZURE_STORAGE_CONNECTION_STRING."
-            )
-
-        if not container_name:
-            container_name = os.getenv("AZURE_CONTAINER", "talentflow-azure")
+            raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING not set")
 
         self.client = BlobServiceClient.from_connection_string(conn_str)
-        self.bucket_name = container_name
+        self.bucket_name = os.getenv("AZURE_CONTAINER", "talentflow-azure")
         self.container = self.client.get_container_client(self.bucket_name)
 
     def create_bucket(self, bucket_name: str):
-        """
-        Azure cannot create storage accounts using a connection string.
-        But we CAN auto-create the container if it does not exist.
-        """
         self.bucket_name = bucket_name
-    
         try:
-            # Try to get container
             self.container = self.client.get_container_client(bucket_name)
-        
+
             if not self.container.exists():
                 print(f"⚠️ [AZURE] Container does not exist. Creating → {bucket_name}")
                 self.client.create_container(bucket_name)
                 print(f"🎉 [AZURE] Container created: {bucket_name}")
             else:
                 print(f"ℹ️ [AZURE] Container already exists: {bucket_name}")
-    
         except Exception as e:
             print("❌ [AZURE] Container creation failed:", e)
             raise
-
 
     def create_folder(self, folder: str):
         if not folder.endswith("/"):
@@ -676,11 +633,9 @@ class AzureProvider(CloudProvider):
             self.container.upload_blob(name=folder, data=b"", overwrite=True)
             print(f"📁 [AZURE] Folder created: {folder}")
         except Exception:
-            pass  # ignore if exists
-
+            pass
 
     def generate_upload_link(self, object_path: str) -> str:
-        # Generate a SAS URL allowing PUT (create/write)
         from datetime import datetime, timedelta
 
         account_name = self.client.account_name
@@ -708,7 +663,6 @@ class AzureProvider(CloudProvider):
 
         src_url = src_blob.url
         dst_blob.start_copy_from_url(src_url)
-        # Optionally wait for copy, but for demo we delete immediately
         src_blob.delete_blob()
 
     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
