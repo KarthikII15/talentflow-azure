@@ -258,7 +258,7 @@ def get_provider(provider: CloudName) -> CloudProvider:
     if provider == "aws":
         return AWSProvider()
     if provider == "azure":
-        return AzureProvider()
+        return AzureProvider(environment=os.getenv("APP_ENV", "dev"))
     raise HTTPException(400, "Invalid provider")
 
 def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
@@ -384,6 +384,85 @@ def generate_upload_url(payload: UploadURLRequest, provider: CloudName = Query(.
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, str(e))
+
+   
+@app.post("/cloud/process-files")
+def process_uploaded_files(provider: CloudName = Query(...)):
+    try:
+        provider_obj = get_provider(provider)
+        librarian = LibrarianAgent()
+        session_id = uuid.uuid4().hex
+        results = []
+
+        incoming_files = provider_obj.list_files("incoming/")
+
+        for file_path in incoming_files:
+            filename = os.path.basename(file_path)
+
+            # 1. Download bytes
+            try:
+                file_bytes = provider_obj.download_bytes(file_path)
+            except:
+                provider_obj.move_file(file_path, f"Others/{filename}")
+                continue
+
+            # 2. Extract text
+            text = extract_text_from_bytes(file_bytes, filename)
+            if not text:
+                provider_obj.move_file(file_path, f"Others/{filename}")
+                continue
+
+            # 3. Classify document
+            doc_type = librarian.classify_document(text)
+
+            # -------------------- JD SECTION --------------------
+            if doc_type == "JD":
+                jd_id = f"JD-{uuid.uuid4().hex[:8]}"
+                job_title = extract_jd_title(text)
+
+                save_jd(jd_id, filename, text, session_id, job_title)
+                provider_obj.move_file(file_path, f"JDs/{filename}")
+
+                results.append({
+                    "file": filename,
+                    "type": "JD",
+                    "jd_id": jd_id,
+                    "job_title": job_title,
+                })
+                continue
+
+            # -------------------- RESUME SECTION --------------------
+            if doc_type == "RESUME":
+                cand_id = f"CAND-{uuid.uuid4().hex[:8]}"
+                name = extract_name_from_text(text)
+                skills = extract_skills(text)
+
+                save_candidate(cand_id, filename, text, session_id, name, skills)
+                provider_obj.move_file(file_path, f"Resumes/{filename}")
+
+                results.append({
+                    "file": filename,
+                    "type": "RESUME",
+                    "candidate_id": cand_id,
+                    "candidate_name": name,
+                    "skills": skills,
+                })
+                continue
+
+            # -------------------- OTHER SECTION --------------------
+            provider_obj.move_file(file_path, f"Others/{filename}")
+            results.append({"file": filename, "type": "OTHER"})
+
+        return {
+            "message": "Processing completed",
+            "session_id": session_id,
+            "details": results,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
+    
 
 # ---------------------------------------------------------
 # DATA FETCH

@@ -1,352 +1,3 @@
-# from abc import ABC, abstractmethod
-# from typing import List, Dict, Any
-# import json
-
-# # ----------------- BASE CLASS ------------------
-
-# class CloudProvider(ABC):
-#     cloud_name: str
-
-#     @abstractmethod
-#     def create_bucket(self, bucket_name: str):
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def create_folder(self, bucket_name: str, folder: str):
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def list_files(self, prefix: str) -> List[str]:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def move_file(self, source: str, dest: str) -> None:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
-#         raise NotImplementedError
-
-
-# # ----------------- GCP IMPLEMENTATION ------------------
-
-# from google.cloud import storage
-# from google.cloud.exceptions import Conflict
-
-
-# class GCPProvider(CloudProvider):
-#     cloud_name = "gcp"
-
-#     def __init__(self):
-#         self.client = storage.Client()
-#         self.bucket_name = f"talentflow-{self.cloud_name}"
-
-#     def _get_bucket(self):
-#         return self.client.bucket(self.bucket_name)
-
-#     def create_bucket(self, bucket_name: str):
-#         self.bucket_name = bucket_name
-#         try:
-#             return self.client.create_bucket(bucket_name, location="us-central1")
-#         except Conflict:
-#             return self.client.bucket(bucket_name)
-
-#     def create_folder(self, bucket_name: str, folder: str):
-#         self.bucket_name = bucket_name
-#         if not folder.endswith("/"):
-#             folder += "/"
-
-#         bucket = self._get_bucket()
-#         blob = bucket.blob(folder)
-#         if not blob.exists():
-#             blob.upload_from_string(b"")
-
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str:
-#         self.bucket_name = bucket_name
-#         if not folder.endswith("/"):
-#             folder += "/"
-
-#         bucket = self._get_bucket()
-#         object_name = folder + "upload-here.tmp"
-#         blob = bucket.blob(object_name)
-
-#         return blob.generate_signed_url(
-#             version="v4",
-#             expiration=3600,
-#             method="PUT",
-#             content_type="application/octet-stream",
-#         )
-
-#     # --------- Listing ---------
-
-#     def list_files(self, prefix: str) -> List[str]:
-#         bucket = self._get_bucket()
-#         blobs = bucket.list_blobs(prefix=prefix)
-#         return [b.name for b in blobs if not b.name.endswith("/")]
-
-#     # --------- 🔥 PATCHED move_file() (safe + reliable) ---------
-#     def move_file(self, source: str, dest: str) -> None:
-#         """
-#         Safely move a blob even if frontend renamed or encoding changed.
-#         Fixes 404 errors due to GCS URL-encoding.
-#         """
-#         bucket = self._get_bucket()
-#         prefix = "/".join(source.split("/")[:-1]) + "/"
-#         filename_only = source.split("/")[-1]
-
-#         blobs = list(bucket.list_blobs(prefix=prefix))
-
-#         matched_blob = None
-#         for b in blobs:
-#             # match exact OR URL-decoded OR suffix match
-#             if (
-#                 b.name == source or
-#                 b.name.endswith(filename_only) or
-#                 b.name.replace("%20", " ") == source or
-#                 b.name.replace("%20", " ").endswith(filename_only)
-#             ):
-#                 matched_blob = b
-#                 break
-
-#         if not matched_blob:
-#             raise Exception(f"GCP MOVE ERROR: File not found → {source}")
-
-#         # Copy then delete
-#         bucket.copy_blob(matched_blob, bucket, new_name=dest)
-#         matched_blob.delete()
-        
-#         # --------- Upload JSON ---------
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
-#         """
-#         Upload JSON file at given object path.
-#         """
-#         bucket = self._get_bucket()
-#         blob = bucket.blob(path)
-#         blob.upload_from_string(
-#             json.dumps(data, indent=2),
-#             content_type="application/json",
-#         )
-
-
-
-
-# # ----------------- AWS STUB ------------------
-
-# class AWSProvider(CloudProvider):
-#     cloud_name = "aws"
-
-#     def create_bucket(self, bucket_name: str): raise NotImplementedError
-#     def create_folder(self, bucket_name: str, folder: str): raise NotImplementedError
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str: raise NotImplementedError
-#     def list_files(self, prefix: str) -> List[str]: raise NotImplementedError
-#     def move_file(self, source: str, dest: str) -> None: raise NotImplementedError
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None: raise NotImplementedError
-
-
-# # ----------------- AZURE STUB ------------------
-
-# class AzureProvider(CloudProvider):
-#     cloud_name = "azure"
-
-#     def create_bucket(self, bucket_name: str): raise NotImplementedError
-#     def create_folder(self, bucket_name: str, folder: str): raise NotImplementedError
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str: raise NotImplementedError
-#     def list_files(self, prefix: str) -> List[str]: raise NotImplementedError
-#     def move_file(self, source: str, dest: str) -> None: raise NotImplementedError
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None: raise NotImplementedError
-
-
-# from abc import ABC, abstractmethod
-# from typing import List, Dict, Any
-# import json
-
-# # ----------------- BASE CLASS ------------------
-
-# class CloudProvider(ABC):
-#     cloud_name: str
-
-#     @abstractmethod
-#     def create_bucket(self, bucket_name: str):
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def create_folder(self, bucket_name: str, folder: str):
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def list_files(self, prefix: str) -> List[str]:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def move_file(self, source: str, dest: str) -> None:
-#         raise NotImplementedError
-
-#     @abstractmethod
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
-#         raise NotImplementedError
-
-
-# # ----------------- GCP IMPLEMENTATION ------------------
-
-# from google.cloud import storage
-# from google.cloud.exceptions import Conflict
-
-# class GCPProvider(CloudProvider):
-#     cloud_name = "gcp"
-
-#     def __init__(self):
-#         self.client = storage.Client()
-#         self.bucket_name = f"talentflow-{self.cloud_name}"
-
-#     def _get_bucket(self):
-#         return self.client.bucket(self.bucket_name)
-
-#     # ----------- AUTOMATIC CORS SETUP ADDED HERE --------------
-#     def _apply_cors(self, bucket):
-#         """Apply CORS rules so uploads work without gsutil command."""
-#         cors_config = [{
-#             "origin": ["*"],  # or restrict later to your domain
-#             "method": ["GET", "PUT", "POST", "DELETE"],
-#             "responseHeader": ["Content-Type", "Access-Control-Allow-Origin"],
-#             "maxAgeSeconds": 3600
-#         }]
-
-#         bucket.cors = cors_config
-#         bucket.patch()
-#         print("✅ CORS rules applied automatically.")
-#     # ----------------------------------------------------------
-
-#     def create_bucket(self, bucket_name: str):
-#         self.bucket_name = bucket_name
-
-#         try:
-#             # Create the bucket
-#             bucket = self.client.create_bucket(bucket_name, location="us-central1")
-#             print("🎉 Bucket created:", bucket.name)
-
-#             # Apply CORS to new bucket
-#             self._apply_cors(bucket)
-#             return bucket
-
-#         except Conflict:
-#             # Bucket already exists
-#             bucket = self.client.bucket(bucket_name)
-#             print("ℹ️ Bucket already exists:", bucket.name)
-
-#             # If CORS missing or empty → apply CORS automatically
-#             if not bucket.cors:
-#                 print("⚠️ Bucket has no CORS — fixing automatically…")
-#                 self._apply_cors(bucket)
-#             else:
-#                 print("✔ Bucket already has CORS configuration.")
-
-#             return bucket
-
-#     def create_folder(self, bucket_name: str, folder: str):
-#         self.bucket_name = bucket_name
-#         if not folder.endswith("/"):
-#             folder += "/"
-
-#         bucket = self._get_bucket()
-#         blob = bucket.blob(folder)
-
-#         if not blob.exists():
-#             blob.upload_from_string(b"")
-
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str:
-#         self.bucket_name = bucket_name
-
-#         if not folder.endswith("/"):
-#             folder += "/"
-
-#         bucket = self._get_bucket()
-#         object_name = folder + "upload-here.tmp"
-#         blob = bucket.blob(object_name)
-
-#         return blob.generate_signed_url(
-#             version="v4",
-#             expiration=3600,
-#             method="PUT",
-#             content_type="application/octet-stream",
-#         )
-
-#     # --------- Listing ---------
-
-#     def list_files(self, prefix: str) -> List[str]:
-#         bucket = self._get_bucket()
-#         blobs = bucket.list_blobs(prefix=prefix)
-#         return [b.name for b in blobs if not b.name.endswith("/")]
-
-#     # --------- Safe Move File ---------
-
-#     def move_file(self, source: str, dest: str) -> None:
-#         bucket = self._get_bucket()
-#         prefix = "/".join(source.split("/")[:-1]) + "/"
-#         filename_only = source.split("/")[-1]
-
-#         blobs = list(bucket.list_blobs(prefix=prefix))
-#         matched_blob = None
-
-#         for b in blobs:
-#             if (
-#                 b.name == source or
-#                 b.name.endswith(filename_only) or
-#                 b.name.replace("%20", " ") == source or
-#                 b.name.replace("%20", " ").endswith(filename_only)
-#             ):
-#                 matched_blob = b
-#                 break
-
-#         if not matched_blob:
-#             raise Exception(f"GCP MOVE ERROR: File not found → {source}")
-
-#         bucket.copy_blob(matched_blob, bucket, new_name=dest)
-#         matched_blob.delete()
-
-#     # --------- Upload JSON ---------
-
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
-#         bucket = self._get_bucket()
-#         blob = bucket.blob(path)
-
-#         blob.upload_from_string(
-#             json.dumps(data, indent=2),
-#             content_type="application/json",
-#         )
-
-
-# # ----------------- AWS STUB ------------------
-
-# class AWSProvider(CloudProvider):
-#     cloud_name = "aws"
-#     def create_bucket(self, bucket_name: str): raise NotImplementedError
-#     def create_folder(self, bucket_name: str, folder: str): raise NotImplementedError
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str: raise NotImplementedError
-#     def list_files(self, prefix: str) -> List[str]: raise NotImplementedError
-#     def move_file(self, source: str, dest: str) -> None: raise NotImplementedError
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None: raise NotImplementedError
-
-
-# # ----------------- AZURE STUB ------------------
-
-# class AzureProvider(CloudProvider):
-#     cloud_name = "azure"
-#     def create_bucket(self, bucket_name: str): raise NotImplementedError
-#     def create_folder(self, bucket_name: str, folder: str): raise NotImplementedError
-#     def generate_upload_link(self, bucket_name: str, folder: str) -> str: raise NotImplementedError
-#     def list_files(self, prefix: str) -> List[str]: raise NotImplementedError
-#     def move_file(self, source: str, dest: str) -> None: raise NotImplementedError
-#     def upload_json(self, path: str, data: Dict[str, Any]) -> None: raise NotImplementedError
-
-
 # backend/db/cloud_provider.py
 
 from abc import ABC, abstractmethod
@@ -602,14 +253,30 @@ from azure.storage.blob import (
 class AzureProvider(CloudProvider):
     cloud_name = "azure"
 
-    def __init__(self):
-        conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    def __init__(self, environment="dev"):
+        """
+        Load Azure connection details dynamically from Firestore.
+        This makes Azure fully dynamic after provisioning.
+        """
+        from cloud_config import get_azure_config
+
+        cfg = get_azure_config(environment)
+        if not cfg:
+            raise RuntimeError(f"[AZURE] No Azure config found for env={environment}")
+
+        conn_str = cfg.get("connection_string")
+        container_name = cfg.get("container_name")
+
         if not conn_str:
-            raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING not set")
+            raise RuntimeError("[AZURE] Missing connection_string in Firestore")
+        if not container_name:
+            raise RuntimeError("[AZURE] Missing container_name in Firestore")
 
         self.client = BlobServiceClient.from_connection_string(conn_str)
-        self.bucket_name = os.getenv("AZURE_CONTAINER", "talentflow-azure")
-        self.container = self.client.get_container_client(self.bucket_name)
+        self.bucket_name = container_name
+        self.container = self.client.get_container_client(container_name)
+
+        print(f"🔐 [AZURE] Loaded config from Firestore for env={environment}")
 
     def create_bucket(self, bucket_name: str):
         self.bucket_name = bucket_name
@@ -661,16 +328,29 @@ class AzureProvider(CloudProvider):
         src_blob = self.container.get_blob_client(source)
         dst_blob = self.container.get_blob_client(dest)
 
-        src_url = src_blob.url
-        dst_blob.start_copy_from_url(src_url)
+        if not src_blob.exists():
+            raise Exception(f"[AZURE] Source blob does not exist: {source}")
+
+        copy = dst_blob.start_copy_from_url(src_blob.url)
+
+        # Wait for Azure to finish copy
+        from time import sleep
+        for _ in range(10):  # retry 10 times
+            props = dst_blob.get_blob_properties()
+            if props.copy.status == "success":
+                break
+            sleep(0.5)
+
         src_blob.delete_blob()
+        print(f"📦 [AZURE] Move: {source} → {dest}")
 
     def upload_json(self, path: str, data: Dict[str, Any]) -> None:
+        from azure.storage.blob import ContentSettings
         blob_client = self.container.get_blob_client(path)
         blob_client.upload_blob(
             json.dumps(data, indent=2),
             overwrite=True,
-            content_settings=None,
+            content_settings=ContentSettings(content_type="application/json"),
         )
 
     def download_bytes(self, path: str) -> bytes:
