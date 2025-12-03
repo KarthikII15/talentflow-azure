@@ -315,19 +315,6 @@ def generate_upload_url(payload: UploadURLRequest, provider: CloudName = Query(.
         print("UPLOAD URL ERROR:", e)
         raise HTTPException(500, str(e))
 
-# ---------------------------------------------------------
-# PROCESS FILES
-# ---------------------------------------------------------
-@app.post("/cloud/process-files")
-def process_files(provider: CloudName = Query(...), session_id: str = Query(...)):
-    from agents.jd_extractor import extract_jd_title
-    from agents.name_extractor import extract_name_from_text
-    from agents.skills_extractor import extract_skills
-
-    try:
-        provider_obj = get_provider(provider)
-        incoming_files = provider_obj.list_files("incoming/")
-
         librarian = LibrarianAgent()
         results = []
 
